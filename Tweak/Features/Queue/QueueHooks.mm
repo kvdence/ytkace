@@ -795,12 +795,31 @@ static BOOL YTKACEQueueVideoIsOpen(void) {
         return YTKACEQueueCurrentVideoID().length != 0;
     }
     id watch = YTKACEQueueWatchViewController;
-    if (![watch isKindOfClass:UIViewController.class]) return NO;
-    UIViewController *controller = watch;
-    if (!controller.isViewLoaded) return NO;
-    for (UIView *view = controller.view; view != nil; view = view.superview) {
-        if (view.hidden || view.alpha < 0.01) return NO;
-        if ([view isKindOfClass:UIWindow.class]) return YES;
+    if ([watch isKindOfClass:UIViewController.class]) {
+        UIViewController *controller = watch;
+        if (controller.isViewLoaded) {
+            BOOL visible = NO;
+            for (UIView *view = controller.view; view != nil;
+                 view = view.superview) {
+                if (view.hidden || view.alpha < 0.01) break;
+                if ([view isKindOfClass:UIWindow.class]) {
+                    visible = YES;
+                    break;
+                }
+            }
+            if (visible) return YES;
+        }
+    }
+    // Minimized, the watch page is hidden but the player stays on screen with
+    // its video loaded; a video queued from the feed must not replace it.
+    id player = YTKACEQueuePlayerViewController;
+    if ([player isKindOfClass:UIViewController.class]) {
+        UIViewController *controller = player;
+        id live = YTKACEQueueValue(player, @[@"currentVideoID", @"contentVideoID"]);
+        if (controller.isViewLoaded && controller.view.window != nil &&
+            [live isKindOfClass:NSString.class] && [live length] != 0) {
+            return YES;
+        }
     }
     return NO;
 }
