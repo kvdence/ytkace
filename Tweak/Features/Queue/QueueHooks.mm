@@ -430,6 +430,15 @@ static void YTKACEQueueAdd(NSString *videoID, NSString *title,
             YTKACEQueueFetchTitle(playing);
         }
     }
+    // Queuing the video that is already playing only starts the queue with
+    // it; a second copy would make the queue replay it forever.
+    if ([playing isEqualToString:videoID]) {
+        YTKACEQueueSetFinished(NO);
+        YTKACEQueueSave();
+        YTKACEShowNotice(YTKACELocalized(@"Added to queue"));
+        YTKACEQueueRefreshPanel();
+        return;
+    }
     NSMutableDictionary *item = [NSMutableDictionary dictionary];
     item[@"videoId"] = videoID;
     if (title.length != 0) item[@"title"] = title;
@@ -816,8 +825,22 @@ static BOOL YTKACEQueueVideoIsOpen(void) {
     if ([player isKindOfClass:UIViewController.class]) {
         UIViewController *controller = player;
         id live = YTKACEQueueValue(player, @[@"currentVideoID", @"contentVideoID"]);
-        if (controller.isViewLoaded && controller.view.window != nil &&
-            [live isKindOfClass:NSString.class] && [live length] != 0) {
+        UIView *view = controller.isViewLoaded ? controller.view : nil;
+        UIWindow *window = view.window;
+        BOOL shown = window != nil;
+        // A dismissed player can linger in memory, so it must also be
+        // visible and on screen, not just attached to a window.
+        for (UIView *ancestor = view; shown && ancestor != nil;
+             ancestor = ancestor.superview) {
+            if (ancestor.hidden || ancestor.alpha < 0.01) shown = NO;
+        }
+        if (shown) {
+            CGRect onScreen = CGRectIntersection(
+                [view convertRect:view.bounds toView:nil], window.bounds);
+            shown = !CGRectIsNull(onScreen) && onScreen.size.width > 20.0 &&
+                onScreen.size.height > 20.0;
+        }
+        if (shown && [live isKindOfClass:NSString.class] && [live length] != 0) {
             return YES;
         }
     }
