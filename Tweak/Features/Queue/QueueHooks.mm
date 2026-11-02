@@ -2224,12 +2224,31 @@ void YTKACEQueuePrepareMenuRenderers(id renderers) {
     }
 }
 
+// A queue belongs to the player it was built in. Once the player is closed
+// (or the app was relaunched), opening a video from outside the queue starts
+// fresh instead of joining what was left behind.
+static void YTKACEQueueDropStale(id command) {
+    if (!YTKACEFeatureEnabled(YTKACEQueueKey)) return;
+    if (YTKACEQueue().count == 0 || YTKACEQueueVideoIsOpen()) return;
+    id videoID = nil;
+    @try {
+        videoID = [[command valueForKey:@"watchEndpoint"] valueForKey:@"videoId"];
+    } @catch (__unused NSException *exception) {
+        return;
+    }
+    if (![videoID isKindOfClass:NSString.class] || [videoID length] == 0) return;
+    if (YTKACEQueueIndexOfVideo(videoID) != NSNotFound) return;
+    [YTKACEQueue() removeAllObjects];
+    YTKACEQueueSave();
+}
+
 static BOOL YTKACEQueueRouterHandle(id receiver, SEL selector, id command,
                                     id entry, id view, id sender) {
     YTKACEQueueNoteRouter(receiver, OriginalRouterHandle, NO, view, sender);
     if (YTKACEQueueHandleMenuAdd(command, view)) return YES;
     if (YTKACEQueueHandleSentinel(command)) return YES;
     if (YTKACEQueueHandleDiscovery(command, view)) return YES;
+    YTKACEQueueDropStale(command);
     if (OriginalRouterHandle == NULL) return NO;
     return ((BOOL (*)(id, SEL, id, id, id, id))OriginalRouterHandle)(
         receiver, selector, command, entry, view, sender);
@@ -2243,6 +2262,7 @@ static BOOL YTKACEQueueRouterHandleCompletion(id receiver, SEL selector,
     if (YTKACEQueueHandleMenuAdd(command, view)) return YES;
     if (YTKACEQueueHandleSentinel(command)) return YES;
     if (YTKACEQueueHandleDiscovery(command, view)) return YES;
+    YTKACEQueueDropStale(command);
     if (OriginalRouterHandleCompletion == NULL) return NO;
     return ((BOOL (*)(id, SEL, id, id, id, id, id))OriginalRouterHandleCompletion)(
         receiver, selector, command, entry, view, sender, block);
@@ -2255,6 +2275,7 @@ static BOOL YTKACEQueueScopedRouterHandle(id receiver, SEL selector, id command,
     if (YTKACEQueueHandleMenuAdd(command, view)) return YES;
     if (YTKACEQueueHandleSentinel(command)) return YES;
     if (YTKACEQueueHandleDiscovery(command, view)) return YES;
+    YTKACEQueueDropStale(command);
     if (OriginalScopedRouterHandle == NULL) return NO;
     return ((BOOL (*)(id, SEL, id, id, id, id))OriginalScopedRouterHandle)(
         receiver, selector, command, entry, view, sender);
@@ -2269,6 +2290,7 @@ static BOOL YTKACEQueueScopedRouterHandleCompletion(id receiver, SEL selector,
     if (YTKACEQueueHandleMenuAdd(command, view)) return YES;
     if (YTKACEQueueHandleSentinel(command)) return YES;
     if (YTKACEQueueHandleDiscovery(command, view)) return YES;
+    YTKACEQueueDropStale(command);
     if (OriginalScopedRouterHandleCompletion == NULL) return NO;
     return ((BOOL (*)(id, SEL, id, id, id, id, id))
         OriginalScopedRouterHandleCompletion)(
